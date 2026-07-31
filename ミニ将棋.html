@@ -1,0 +1,740 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <title>かいかいミニ将棋</title>
+        <style>
+            body{
+                margin: 0;
+                overflow: hidden;
+                background-color: #90673b;
+            }
+        </style>
+    </head>
+    <body>
+        </div>
+        <script type="importmap">
+            {
+                "imports":{
+                    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+                    "postprocessing/": "https://unpkg.com/three@0.161.0/examples/jsm/postprocessing/"
+                }
+            }
+        </script>
+        <script type="module">
+            const scene = new THREE.Scene();
+            import * as THREE from 'three';
+            
+            import {EffectComposer} from 'postprocessing/EffectComposer.js';
+            import {RenderPass} from 'postprocessing/RenderPass.js';
+            import {ShaderPass} from 'postprocessing/ShaderPass.js';
+
+
+            const textureLoader = new THREE.TextureLoader();
+            const texture = textureLoader.load('texture.jpg');
+            const geo = new THREE.DodecahedronGeometry(2,1);
+            const mat = new THREE.MeshBasicMaterial({map:texture});
+            const title = new THREE.Mesh(geo, mat);
+            title.position.set(0,3,-5);
+            scene.add(title);
+
+
+
+            const board = [
+                ['-r', '-b', '-s', '-g', '-k'],
+                [null, null, null, null, '-p'],
+                [null, null, null, null, null],
+                ['+p', null, null, null, null],
+                ['+k', '+g', '+s', '+b', '+r']
+            ]
+            const spin = [];
+            const P1Move = true;
+
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let selectedPiece = null;
+            let P1Turn = true;
+
+            let moveIndicators=[];
+
+
+
+            function addPieces(){
+                for(let r=0;r<5;r++){
+                    for(let c=0;c<5;c++){
+                        const cell=board[r][c];
+                        if(cell ===null)continue;
+                        const owner = cell[0];
+                        const type = cell[1];
+                        const isP1 = (owner ==='+');
+                        let piece = null;
+
+                        if(type==='k'){
+                            piece = king(isP1);
+                            spin.push(piece);
+                        }
+                        else if(type==='r'){
+                            piece = rook(isP1);
+                            spin.push(piece);
+                        }
+                        else if(type==='b'){
+                            piece = bishop(isP1);
+                            spin.push(piece);
+                        }
+                        else if(type==='g'){
+                            piece = gold(isP1);
+                            spin.push(piece);
+                        }
+                        else if(type==='s'){
+                            piece = silver(isP1);
+                            spin.push(piece);
+                        }
+                        else if(type==='p'){
+                            piece = pawn(isP1);
+                            spin.push(piece);
+                        }
+                        if(piece){
+                            const base = new THREE.Group();
+                            base.userData = {r:r, c:c, type:type, isP1: isP1};
+
+                            const posX = (c*TILE_SIZE) - offset;
+                            const posZ = (r*TILE_SIZE)-offset;
+                            base.position.set(posX, 0.5, posZ);
+                            if(!isP1){
+                                base.rotation.y = Math.PI;
+                            }
+                            base.add(piece);
+                            mark(base, isP1);
+                            addHitbox(base);
+                            base.name="piece";
+                            scene.add(base);
+                        }
+                    }
+                }
+            }
+            
+            const PixelShader = {
+                uniforms: {
+                    "tDiffuse": {value: null},
+                    "pixelSize": {value:2}
+                },
+                vertexShader: `
+                varying vec2 vUv;
+                void main(){
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }`,
+                fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float pixelSize;
+                varying vec2 vUv;
+                void main() {
+                vec2 size = vec2(textureSize(tDiffuse, 0));
+                vec2 coord = floor(vUv * size/pixelSize)*pixelSize/size;
+                gl_FragColor = texture2D(tDiffuse, coord);
+                }`
+            }
+
+            scene.background = new THREE.Color(0xc0adab);            
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({antialias:true});
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            camera.position.set(0, 4.5, 7.8);
+            camera.lookAt(0,0,0);
+
+            const light= new THREE.AmbientLight(0xffffff,1.5);
+            scene.add(light);
+
+            const TILE_SIZE = 1.5;
+            const TILE_HEIGHT = 0.5;
+
+            const boardMaterial = new THREE.MeshBasicMaterial({
+                color:0xedd8c0
+            });
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color:0xb0773b
+            });
+
+            const offset = (5-1)*TILE_SIZE/2;
+
+            for(let r=0; r<5; r++){
+                for(let c=0; c<5; c++){
+                    const tileGeometry = new THREE.BoxGeometry(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
+                    const tileMesh = new THREE.Mesh(tileGeometry, boardMaterial);
+                    tileMesh.name = "tile";
+                    tileMesh.userData = {r:r, c:c};
+
+
+                    const edges = new THREE.EdgesGeometry(tileGeometry);
+                    const outline = new THREE.LineSegments(edges, lineMaterial);
+
+                    const posX = (c*TILE_SIZE)-offset;
+                    const posZ = (r*TILE_SIZE)-offset;
+
+                    tileMesh.position.set(posX, 0, posZ);
+                    outline.position.set(posX, 0.01, posZ);
+                    scene.add(tileMesh);
+                    scene.add(outline);
+                }
+            }
+            
+            const composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            const pixelPass = new ShaderPass(PixelShader);
+            composer.addPass(pixelPass);
+
+            addPieces();
+
+            function animate(){
+                requestAnimationFrame(animate);
+                spin.forEach(piece=>{
+                    piece.rotation.y+=0.01;
+                });
+                title.rotation.x+=0.03;
+                title.rotation.y+=0.03;
+                composer.render();
+
+            }
+
+            function king(isP1){
+                const king = new THREE.Group();
+                //three overlapping octohedrons
+                const kingGeo = new THREE.OctahedronGeometry(0.35, 0);
+                const goldMat = new THREE.MeshBasicMaterial({color: 0xffd700});
+                const redMat = new THREE.MeshBasicMaterial({color: 0xf5426c});
+                const beigeMat = new THREE.MeshBasicMaterial({color: 0xf5cb98});
+
+                const king1 = new THREE.Mesh(kingGeo, goldMat);
+                king.add(king1);
+                const king2 = new THREE.Mesh(kingGeo, redMat);
+                king2.rotation.z = Math.PI/3;
+                king.add(king2);
+                const king3 = new THREE.Mesh(kingGeo, beigeMat);
+                king3.rotation.y = 2*Math.PI/3;
+                king.add(king3);
+
+                const crownGroup = new THREE.Group();
+                crownGroup.position.y = 0.5;
+                const ringGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.05, 8);
+                const crownMat = new THREE.MeshBasicMaterial({ color: 0xbb0000});
+                const ring = new THREE.Mesh(ringGeo, crownMat);
+                crownGroup.add(ring);
+
+                for(let i=0; i<7;/*crown spike*/ i++){
+                    const pointGeo = new THREE.ConeGeometry(0.04, 0.15, 4);
+                    const pointMesh = new THREE.Mesh(pointGeo, crownMat);
+
+                    const angle = (i/7)*Math.PI*2;
+                    const radius = 0.12;
+                    pointMesh.position.x = Math.cos(angle)*radius;
+                    pointMesh.position.z = Math.sin(angle)*radius;
+                    pointMesh.position.y = 0.1;
+                    
+                    crownGroup.add(pointMesh);
+                }
+                king.add(crownGroup);
+
+                return king;
+
+
+            }
+
+            function rook(isP1){
+                const rook = new THREE.Group();
+                const rookGeo = new THREE.DodecahedronGeometry(0.25,0);
+                const rookGeo2 = new THREE.OctahedronGeometry(0.28, 0);
+                rookGeo.clearGroups();
+                for(let i=0; i<20; i++){
+                    rookGeo.addGroup(i*3, 3, i%4);
+                }
+                const rookMats = [
+                    new THREE.MeshBasicMaterial({color: 0x44e18e}),
+                    new THREE.MeshBasicMaterial({color: 0x03fc1c}),
+                    new THREE.MeshBasicMaterial({color: 0xa9f5b1}),
+                    new THREE.MeshBasicMaterial({color: 0x29a352})
+                ]
+                const rookMat2 = new THREE.MeshBasicMaterial({color: 0x1ad681});
+
+                const rook1 = new THREE.Mesh(rookGeo, rookMats);
+                rook.add(rook1);
+                const rook2 = new THREE.Mesh(rookGeo2, rookMat2);
+                
+                rook.add(rook2);
+
+                //four blocks
+                const rookGeo3 = new THREE.BoxGeometry(0.10, 0.15, 0.10);
+                const rookMat3 = new THREE.MeshBasicMaterial({color: 0x2bbd79});
+                const rookBlock1 = new THREE.Mesh(rookGeo3, rookMat3);
+                const rookBlock2 = new THREE.Mesh(rookGeo3, rookMat3);
+                const rookBlock3 = new THREE.Mesh(rookGeo3, rookMat3);
+                const rookBlock4 = new THREE.Mesh(rookGeo3, rookMat3);
+                rookBlock1.position.set(0.11, 0.25, 0.11);
+                rookBlock2.position.set(-0.11, 0.25, 0.11);
+                rookBlock3.position.set(0.11, 0.25, -0.11);
+                rookBlock4.position.set(-0.11, 0.25, -0.11);
+                rook.add(rookBlock1);
+                rook.add(rookBlock2);
+                rook.add(rookBlock3);
+                rook.add(rookBlock4);
+                
+                return rook;
+
+
+            }
+            
+            function bishop(isP1){
+                const bishop = new THREE.Group();
+                const bishopGeo = new THREE.BufferGeometry();
+                const verticies = [];
+                for(let i=0;i<7;i++){
+                    const theta = (i/7)*Math.PI*2;
+                    verticies.push(Math.cos(theta)*0.25,0, Math.sin(theta)*0.25);
+                }
+
+                    verticies.push(0,0.2,0);
+                    verticies.push(0,-0.25,0);
+
+                    const indicies=[];
+
+                    for(let j=0;j<7;j++){
+                        const next = (j+1)%7;
+                        indicies.push(j, next, 7);
+                    }
+                    for(let j=0; j<7; j++){
+                        const next = (j+1)%7;
+                        indicies.push(8, next, j);
+                    }
+                    bishopGeo.setAttribute('position', new THREE.Float32BufferAttribute(verticies, 3));
+                    bishopGeo.setIndex(indicies);
+                    bishopGeo.computeVertexNormals();
+
+                    bishopGeo.clearGroups();
+                    for(let i =0; i<7; i++){
+                        bishopGeo.addGroup(i*3, 3, i%3);
+                    }
+                    for(let i=0; i<7; i++){
+                        bishopGeo.addGroup((7+i)*3, 3, (i+1) %3);
+                    }
+
+
+                    const bishopMats = [
+                         new THREE.MeshStandardMaterial({color:0x337ccd, side: THREE.DoubleSide}),
+                         new THREE.MeshStandardMaterial({color: 0x38a1f2, side: THREE.DoubleSide}),
+                         new THREE.MeshStandardMaterial({color: 0x70fdff, side: THREE.DoubleSide})
+                     ];
+                    const bishop1 = new THREE.Mesh(bishopGeo, bishopMats);
+                    bishop1.position.set(0,0.1,0);
+                    bishop.add(bishop1);
+                    
+
+                    return bishop;
+                }
+
+                function silver(isP1){
+                    const silver = new THREE.Group();
+                    const silverGeo = new THREE.IcosahedronGeometry(0.25,0);
+                    silverGeo.clearGroups();
+
+                    for (let i=0; i<20; i++){
+                        silverGeo.addGroup(i*3, 3, i%4);
+                    }
+                    const silverMats=[
+                        new THREE.MeshBasicMaterial({color: 0xeeeeee}),
+                        new THREE.MeshBasicMaterial({color: 0xcccccc}),
+                        new THREE.MeshBasicMaterial({color:0xaaaaaa}),
+                        new THREE.MeshBasicMaterial({color: 0xdddddd})
+                    ]
+                    const silver1 = new THREE.Mesh(silverGeo, silverMats);
+                    silver.add(silver1);
+                    return silver;
+                }
+
+                function gold(isP1){
+                    const gold = new THREE.Group();
+                    const goldGeo = new THREE.DodecahedronGeometry(0.25,0);
+                    goldGeo.clearGroups();
+                    for(let i=0; i<36; i++){
+                        goldGeo.addGroup(i*3,3,i%4);
+                    }
+                    const goldMats=[
+                        new THREE.MeshBasicMaterial({color:0xfcba03}),
+                        new THREE.MeshBasicMaterial({color:0xd49b00}),
+                        new THREE.MeshBasicMaterial({color:0xffa600}),
+                        new THREE.MeshBasicMaterial({color:0xfff700})
+                    ]
+                    const gold1 = new THREE.Mesh(goldGeo, goldMats);
+                    gold.add(gold1);
+                    return gold;
+                }            
+                function pawn(isP1){
+                    const pawn = new THREE.Group();
+                    const pawnGeo = new THREE.TetrahedronGeometry(0.25,1);
+                    pawnGeo.clearGroups();
+                    for(let i=0; i<16; i++){
+                        pawnGeo.addGroup(i*3, 3, i%4);
+                    }
+                    const pawnMats=[
+                        new THREE.MeshBasicMaterial({color:0xff00a6}),
+                        new THREE.MeshBasicMaterial({color:0xdb2127}),
+                        new THREE.MeshBasicMaterial({color:0xe004c6}),
+                        new THREE.MeshBasicMaterial({color:0xff61c5})
+                    ]
+                    const pawn1 = new THREE.Mesh(pawnGeo, pawnMats);
+                    pawn.add(pawn1);
+                    return pawn;
+
+
+                }
+
+            animate();
+
+
+
+
+
+            window.addEventListener('click', onMouseClick);
+
+            function onMouseClick(event){
+
+                if(Math.abs(event.clientX - clickStartX)>5||Math.abs(event.clientY-clickStartY)>5){return;}
+                mouse.x=(event.clientX/window.innerWidth)*2-1;
+                mouse.y= -(event.clientY/window.innerHeight)*2+1;
+
+                raycaster.setFromCamera(mouse,camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if(intersects.length>0){
+                    if(selectedPiece){
+                        for(let i=0; i<intersects.length; i++){
+                            if(intersects[i].object.name==="indicator"){
+                                intersects[0]=intersects[i];
+                                break;
+                            }
+                        }
+                    }
+                    let object = intersects[0].object;
+                    while(object.parent && object.name!=="piece" && object.name!=="tile"&&object.name!=="indicator"){
+                        object=object.parent;
+                    }
+                    if(object.name === "piece"){
+                        const isMine = (object.userData.isP1===P1Turn);
+                        if(!isMine){
+                            return;
+                        }
+                        if(selectedPiece === object){
+                            selectedPiece.children[0].position.y=0;
+                            selectedPiece = null;
+                            clearIndicators();
+                        }
+                        else{
+
+                         if(selectedPiece){
+                            selectedPiece.children[0].position.y = 0;
+                        }
+                        selectedPiece = object;
+                        selectedPiece.children[0].position.y=0.3;
+                        showValidMoves(selectedPiece);
+                    }
+                    }
+                else if(object.name==="indicator"){
+                    if(selectedPiece){
+                        const startR = selectedPiece.userData.r;
+                        const startC = selectedPiece.userData.c;
+                        const endR = object.userData.r;
+                        const endC = object.userData.c;
+                        const targetCell = board[endR][endC];
+                        if(targetCell){
+                            scene.children.forEach(child=>{
+                                if(child.name==="piece"&&child.userData.r===endR&&child.userData.c===endC){
+                                    if(child.userData.type==='k'){
+                                        triggerWin(selectedPiece.userData.isP1);
+                                        scene.remove(child);
+                                    }else{
+                                        const newOwner = selectedPiece.userData.isP1;
+                                        child.userData.isP1 = newOwner;
+
+                                        let capType = child.userData.type;
+                                        if(capType==='t')capType='p';
+                                        if(capType==='n')capType='s';
+                                        if(capType==='d')capType='r';
+                                        if(capType==='h')capType='b';
+                                        child.userData.type=capType;
+                                        child.children[0].rotation.set(0,0,0);
+                                        const oldBadge = child.getObjectByName("promoBadge");
+                                        if(oldBadge) child.remove(oldBadge);
+
+                                        const benchX = newOwner?-5:5;
+                                        const benchZ = (Math.random()*6)-3;
+                                        child.position.set(benchX, 0, benchZ);
+
+                                        child.userData.r = -1;
+                                        child.userData.c = -1;
+                                        child.children[0].position.y=0;
+                                    }
+
+                                }
+                            });
+                        }
+                        if(startR !==-1){
+                            board[startR][startC]=null;
+                        }
+                        let myType = selectedPiece.userData.type;
+                        if(startR !== -1){
+                            const isP1 = selectedPiece.userData.isP1;
+                            const isAtEnd = (isP1 && endR ===0)||(!isP1 && endR===4);
+                            const canPromote = ['p','s','r','b'].includes(myType);
+                            if(canPromote&&isAtEnd){
+                                if(myType==='p')myType='t';
+                                if(myType==='s')myType='n';
+                                if(myType==='r')myType='d';
+                                if(myType==='b')myType='h';
+
+                                addGoldBadge(selectedPiece);
+                                selectedPiece.userData.type=myType;
+                            }
+                        }
+                        const ownerChar = selectedPiece.userData.isP1?"+":"-";
+                        const typeChar = myType;
+                        board[endR][endC]=ownerChar+typeChar;
+                        if(startR===-1){
+                            selectedPiece.position.set(object.position.x,0.5,object.position.z);
+
+                        }else{
+                            selectedPiece.position.x=object.position.x;
+                            selectedPiece.position.z=object.position.z;
+                        }
+                        selectedPiece.position.x=object.position.x;
+                        selectedPiece.position.z=object.position.z;
+                        selectedPiece.children[0].position.y=0;
+
+                        selectedPiece.userData.r = endR;
+                        selectedPiece.userData.c = endC;
+                        selectedPiece = null;
+                        clearIndicators();
+                        P1Turn = !P1Turn;
+
+                    }
+                }
+                else if(object.name ==="tile"){
+                    if(selectedPiece){
+                        selectedPiece.children[0].position.y=0.0;
+                        selectedPiece = null;
+                        clearIndicators();
+                    }
+                }
+            }
+        }
+
+            function addHitbox(group){
+                const geo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+                const mat = new THREE.MeshBasicMaterial({
+                    transparent:true,
+                    opacity:0.0,
+                    color:0xffffff
+                });
+                const box = new THREE.Mesh(geo, mat);
+                box.position.y = 0.3;
+                group.add(box);
+            }
+
+            let isDragging = false;
+            let previousMouseX = 0;
+            let previousMouseY = 0;
+            
+            let theta = 0;
+            let phi = Math.PI/3;
+            let clickStartX = 0;
+            let clickStartY = 0;
+            
+            window.addEventListener('mousedown', function(e){
+                isDragging = true;
+                previousMouseX = e.clientX;
+                previousMouseY = e.clientY;
+                clickStartX = e.clientX;
+                clickStartY = e.clientY;
+            });
+            window.addEventListener('mouseup',function(){
+                isDragging = false;
+            });
+            window.addEventListener('mousemove', function(e){
+                if(isDragging){
+                    const deltaX = e.clientX - previousMouseX;
+                    const deltaY = e.clientY - previousMouseY;
+                    previousMouseX = e.clientX;
+                    previousMouseY = e.clientY;
+                    theta-=deltaX*0.005;
+                    phi-=deltaY*0.005;
+                    phi=Math.max(0.1, Math.min(Math.PI/2-0.1,phi));
+                    
+                    const camX = Math.sin(theta)*Math.sin(phi) *9;
+                    const camY = Math.cos(phi)*9
+                    const camZ = Math.cos(theta)*Math.sin(phi) *9;
+
+                    camera.position.set(camX, camY, camZ);
+                    camera.lookAt(0,0,0);
+                }
+            });
+
+
+            function mark(group, isP1){
+                const color = isP1 ? 0x111111: 0xffffff;
+                const outlineColor = isP1 ? 0xffffff: 0x111111;
+                const outlineGeo = new THREE.BoxGeometry(0.20, 0.049, 0.20);
+                const outlineMat = new THREE.MeshBasicMaterial({ color: outlineColor});
+                const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
+                outlineMesh.position.set(0.5, -0.201, 0.5);
+                group.add(outlineMesh);
+                const geo = new THREE.BoxGeometry(0.14, 0.05, 0.14);
+                const mat = new THREE.MeshBasicMaterial({color: color});
+                const badge = new THREE.Mesh(geo, mat);
+                badge.position.set(0.5, -0.2, 0.5);
+                group.add(badge);
+            }
+            function addGoldBadge(group){
+                const geo = new THREE.BoxGeometry(0.20, 0.049, 0.20);
+                const mat = new THREE.MeshBasicMaterial({color:0xeb950c});
+                const badge = new THREE.Mesh(geo,mat);
+                badge.name="promoBadge";
+                badge.position.set(-0.5, -0.201, -0.5);
+                group.add(badge);
+            }
+
+            function showValidMoves(piece){
+                clearIndicators();
+
+                const startR = piece.userData.r;
+                const startC = piece.userData.c;
+                const type = piece.userData.type;
+                const isP1 = piece.userData.isP1;
+
+                if(startR===-1){
+                    for(let r = 0;r<5;r++){
+                        for(let c=0; c<5; c++){
+                            if(board[r][c]===null)addIndicator(r,c);
+                        }
+                    }
+                    return;
+                }
+
+                const steps={//-1 = forward
+                    'p':[[-1,0]],
+                    'k':[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]],
+                    'g':[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,0]],
+                    's':[[-1,-1],[-1,0],[-1,1],[1,-1],[1,1]],
+                    't':[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,0]],
+                    'n':[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,0]],
+                    'd':[[-1,-1],[-1,1],[1,-1],[1,1]],
+                    'h':[[-1,0],[0,-1],[0,1],[1,0]]
+
+                };
+                if(steps[type]){
+                    steps[type].forEach(move=>{
+                        const dr = isP1 ? move[0]: -move[0];
+                        const dc = isP1 ? move[1]: -move[1];
+                        check(startR + dr, startC + dc, isP1);
+                    });
+                }
+                if(type==='r'||type==='b'||type==='d'||type==='h'){
+                    const directions = [];
+                    if(type==='r'||type==='d'){
+                        directions.push([0,1],[0,-1],[1,0],[-1,0]);
+                    }
+                    if(type==='b'||type==='h'){
+                        directions.push([-1,1],[1,-1],[1,1],[-1,-1]);
+                    }
+                    directions.forEach(dir =>{
+                        let r = startR;
+                        let c= startC;
+                        while(true){
+                            r+=dir[0];
+                            c+=dir[1];
+                            const keepGoing = check(r, c, isP1);
+                            if(!keepGoing) break;
+                        }
+                    });
+
+                }
+            }
+
+            function check(r, c, isP1){
+                if(r<-0.1 || r>4.1 || c<-0.1||c>4){
+                    return false;
+                }
+
+                const cell = board[r][c];
+                if(cell){
+                    const ally = (cell[0]==='+')===isP1;
+                    if(ally){
+                        return false;
+                    } else{
+                        addIndicator(r,c); //capture
+                        return false;
+                    }
+                }
+                addIndicator(r, c);
+                return true;
+            }
+
+            function addIndicator(r, c){
+                const hitboxGeo = new THREE.BoxGeometry(1,1,1);
+                const hitboxMat = new THREE.MeshBasicMaterial({
+                    color:0x00ff00,
+                    transparent:true,
+                    opacity:0
+                });
+                const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
+                const geo = new THREE.PlaneGeometry(1, 1);
+                const mat = new THREE.MeshBasicMaterial({
+                    color:0xdd0000,
+                    transparent:true,
+                    opacity:0.2,
+                    side: THREE.DoubleSide
+                });
+                const marker = new THREE.Mesh(geo,mat);
+
+                const offset = 3.0;
+                const posX = (c*1.5)-offset;
+                const posZ = (r*1.5)-offset;
+                hitbox.rotation.x=-Math.PI/2;
+                hitbox.position.set(posX,0.3,posZ);
+                hitbox.userData={r:r,c:c};
+                hitbox.name="indicator";
+                scene.add(hitbox);
+                moveIndicators.push(hitbox);
+
+
+                marker.rotation.x=-Math.PI/2;
+                marker.position.set(posX,0.26, posZ);
+                marker.userData={r:r, c:c};
+                marker.name="indicator";
+                scene.add(marker);
+                moveIndicators.push(marker);
+            }
+            function clearIndicators(){
+                moveIndicators.forEach(m=>{
+                    scene.remove(m);
+                    m.geometry.dispose();
+                    m.material.dispose();
+                });
+                moveIndicators=[];
+            }
+            function triggerWin(){
+                if(!P1Turn){
+                    alert('Sente(black)s king got captured. Gote(white) won.');
+                }else{
+                    alert('Gote(white)s king got captured. Sente(black) won.');
+                }
+            }
+            
+
+           
+            
+            
+
+        </script>
+    </body>
+</html>
