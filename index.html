@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -6,15 +5,196 @@
         <meta name="viewport" content="width=device-width,initial-scale=1.0">
         <title>かいかいミニ将棋</title>
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+
             body{
                 margin: 0;
                 overflow: hidden;
                 background-color: #90673b;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+
+            #aboutPrompt{
+                position: fixed;
+                left: 50%;
+                bottom: 22px;
+                transform: translateX(-50%);
+                z-index: 20;
+                color: #ffffff;
+                font-family: 'Press Start 2P', monospace;
+                font-size: 11px;
+                font-weight: 400;
+                line-height: 1.6;
+                letter-spacing: 0;
+                text-align: center;
+                pointer-events: none;
+                user-select: none;
+                -webkit-font-smoothing: none;
+                text-rendering: geometricPrecision;
+            }
+
+            #aboutOverlay{
+                position: fixed;
+                inset: 0;
+                z-index: 30;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                box-sizing: border-box;
+                background: rgba(0, 0, 0, 0.46);
+            }
+
+            #aboutBox{
+                width: min(760px, 92vw);
+                max-height: 84vh;
+                overflow-y: auto;
+                box-sizing: border-box;
+                padding: 26px 30px;
+                border: 3px solid #111111;
+                border-radius: 0;
+                background: #ffffff;
+                color: #1f1f1f;
+                font-family: 'Press Start 2P', monospace;
+                -webkit-font-smoothing: none;
+                text-rendering: geometricPrecision;
+            }
+
+            #aboutBox h2{
+                font-family: 'Press Start 2P', monospace;
+                margin: 0 0 10px;
+                font-size: 18px;
+                line-height: 1.5;
+            }
+
+            #aboutBox .aboutHint{
+                font-family: 'Press Start 2P', monospace;
+                margin: 0 0 20px;
+                color: #666666;
+                font-size: 8px;
+                line-height: 1.7;
+            }
+
+            #aboutBox h3{
+                font-family: 'Press Start 2P', monospace;
+                margin: 20px 0 10px;
+                font-size: 11px;
+                line-height: 1.7;
+            }
+
+            #aboutBox p{
+                font-family: 'Press Start 2P', monospace;
+                margin: 7px 0;
+                line-height: 1.8;
+                font-size: 9px;
+            }
+
+            #aboutBox ul{
+                font-family: 'Press Start 2P', monospace;
+                margin: 7px 0 0 20px;
+                padding: 0;
+            }
+
+            #aboutBox li{
+                font-family: 'Press Start 2P', monospace;
+                margin: 7px 0;
+                line-height: 1.8;
+                font-size: 9px;
+            }
+
+            #aboutBox .pieceGrid{
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px 24px;
+            }
+
+            #aboutBox .piece{
+                padding: 9px 11px;
+                border: 2px solid #dddddd;
+                border-radius: 0;
+                background: #fafafa;
+                line-height: 1.6;
+            }
+
+            #aboutBox .piece strong{
+                display: inline-block;
+                min-width: 86px;
+            }
+
+            #aboutBox .closeNote{
+                margin-top: 20px;
+                padding-top: 12px;
+                border-top: 1px solid #e5e5e5;
+                color: #666666;
+                font-size: 8px;
+                line-height: 1.7;
+            }
+
+            @media (max-width: 620px){
+                #aboutBox{
+                    padding: 21px 20px;
+                }
+
+                #aboutBox .pieceGrid{
+                    grid-template-columns: 1fr;
+                }
+
+                #aboutPrompt{
+                    bottom: 14px;
+                    max-width: 92vw;
+                    font-size: 8px;
+                    line-height: 1.7;
+                }
             }
         </style>
     </head>
     <body>
+        <div id="aboutPrompt">PRESS [SPACE] FOR ABOUT</div>
+
+        <div id="aboutOverlay" aria-hidden="true">
+            <div id="aboutBox" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+                <h2 id="aboutTitle">About Minishogi</h2>
+                <p class="aboutHint">Press SPACE again to close this window.</p>
+
+                <h3>How to play</h3>
+                <p>
+                    This is a 5×5 minishogi-style game. On your turn, click one of your pieces,
+                    then click a highlighted square to move or capture.
+                </p>
+
+                <h3>Piece moves</h3>
+                <div class="pieceGrid">
+                    <div class="piece"><strong>King</strong> One square in any direction.</div>
+                    <div class="piece"><strong>Rook</strong> Any number of squares horizontally until blocked.</div>
+                    <div class="piece"><strong>Bishop</strong> Any number of squares diagonally until blocked.</div>
+                    <div class="piece"><strong>Gold</strong> Moves like a king, but cannot go diagonally backwards</div>
+                    <div class="piece"><strong>Silver</strong> Moves like a king, but cannot go backwards, and sideways</div>
+                    <div class="piece"><strong>Pawn</strong> One square straight forward.</div>
+                </div>
+                <ul>
+                    <li>Moving onto an opponent's piece captures it.</li>
+                </ul>
+
+                <h3>Promotion</h3>
+                <ul>
+                    <li>King and Gold cannot promote.</li>
+                    <li>Pawn → promoted Pawn (Gold-like movement).</li>
+                    <li>Silver → promoted Silver (Gold-like movement).</li>
+                    <li>Rook → Dragon (rook movement + one-square diagonal moves).</li>
+                    <li>Bishop → Horse (bishop movement + one-square orthogonal moves).</li>
+                    <li>In this implementation, Pawn, Silver, Rook, and Bishop automatically promote when they reach the farthest rank.</li>
+                </ul>
+
+                <h3>How to win</h3>
+                <p>Capture the opposing King to win the game.</p>
+
+                <p class="closeNote">
+                    Dragging the mouse rotates the camera. But sorry for that spinning shogi thing lol it might block your way
+                </p>
+            </div>
         </div>
+
         <script type="importmap">
             {
                 "imports":{
@@ -26,7 +206,7 @@
         <script type="module">
             const scene = new THREE.Scene();
             import * as THREE from 'three';
-            
+           
             import {EffectComposer} from 'postprocessing/EffectComposer.js';
             import {RenderPass} from 'postprocessing/RenderPass.js';
             import {ShaderPass} from 'postprocessing/ShaderPass.js';
@@ -58,6 +238,28 @@
             let P1Turn = true;
 
             let moveIndicators=[];
+
+            const aboutOverlay = document.getElementById('aboutOverlay');
+            const aboutPrompt = document.getElementById('aboutPrompt');
+
+            function toggleAbout(){
+                const isOpen = aboutOverlay.style.display === 'flex';
+                aboutOverlay.style.display = isOpen ? 'none' : 'flex';
+                aboutOverlay.setAttribute('aria-hidden', String(isOpen));
+            }
+
+            window.addEventListener('keydown', function(event){
+                if(event.code === 'Space'){
+                    event.preventDefault();
+                    toggleAbout();
+                }
+            });
+
+            aboutOverlay.addEventListener('click', function(event){
+                if(event.target === aboutOverlay){
+                    toggleAbout();
+                }
+            });
 
 
 
@@ -114,7 +316,7 @@
                     }
                 }
             }
-            
+           
             const PixelShader = {
                 uniforms: {
                     "tDiffuse": {value: null},
@@ -182,7 +384,7 @@
                     scene.add(outline);
                 }
             }
-            
+           
             const composer = new EffectComposer(renderer);
             composer.addPass(new RenderPass(scene, camera));
             const pixelPass = new ShaderPass(PixelShader);
@@ -234,7 +436,7 @@
                     pointMesh.position.x = Math.cos(angle)*radius;
                     pointMesh.position.z = Math.sin(angle)*radius;
                     pointMesh.position.y = 0.1;
-                    
+                   
                     crownGroup.add(pointMesh);
                 }
                 king.add(crownGroup);
@@ -263,7 +465,7 @@
                 const rook1 = new THREE.Mesh(rookGeo, rookMats);
                 rook.add(rook1);
                 const rook2 = new THREE.Mesh(rookGeo2, rookMat2);
-                
+               
                 rook.add(rook2);
 
                 //four blocks
@@ -281,12 +483,12 @@
                 rook.add(rookBlock2);
                 rook.add(rookBlock3);
                 rook.add(rookBlock4);
-                
+               
                 return rook;
 
 
             }
-            
+           
             function bishop(isP1){
                 const bishop = new THREE.Group();
                 const bishopGeo = new THREE.BufferGeometry();
@@ -330,7 +532,7 @@
                     const bishop1 = new THREE.Mesh(bishopGeo, bishopMats);
                     bishop1.position.set(0,0.1,0);
                     bishop.add(bishop1);
-                    
+                   
 
                     return bishop;
                 }
@@ -544,12 +746,12 @@
             let isDragging = false;
             let previousMouseX = 0;
             let previousMouseY = 0;
-            
+           
             let theta = 0;
             let phi = Math.PI/3;
             let clickStartX = 0;
             let clickStartY = 0;
-            
+           
             window.addEventListener('mousedown', function(e){
                 isDragging = true;
                 previousMouseX = e.clientX;
@@ -569,7 +771,7 @@
                     theta-=deltaX*0.005;
                     phi-=deltaY*0.005;
                     phi=Math.max(0.1, Math.min(Math.PI/2-0.1,phi));
-                    
+                   
                     const camX = Math.sin(theta)*Math.sin(phi) *9;
                     const camY = Math.cos(phi)*9
                     const camZ = Math.cos(theta)*Math.sin(phi) *9;
@@ -729,11 +931,11 @@
                     alert('Gote(white)s king got captured. Sente(black) won.');
                 }
             }
-            
+           
 
            
-            
-            
+           
+           
 
         </script>
     </body>
